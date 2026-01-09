@@ -1,0 +1,13 @@
+# Weather Map REST API Dependencies
+
+# Web framework
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+
+# Data processing (already installed)
+geopandas>=0.14.0
+pandas>=2.0.0
+matplotlib>=3.8.0
+
+# Additional dependencies for FastAPI
+python-multipart>=0.0.6
