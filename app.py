@@ -8,9 +8,11 @@ and produces a weather visualization image.
 
 import json
 from typing import Optional
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 
 # Import the weather map service
@@ -26,6 +28,7 @@ from models import MeteoRequest
 
 # Initialize the weather map service
 weather_service: Optional[WeatherMapService] = None
+METEO_FOLDER = Path("./meteo")
 
 
 # ===============================
@@ -57,6 +60,12 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# Ensure meteo folder exists
+METEO_FOLDER.mkdir(parents=True, exist_ok=True)
+
+# Mount the meteo folder as static files for HTTP browsing
+app.mount("/meteo", StaticFiles(directory=str(METEO_FOLDER), html=True), name="meteo")
+
 
 # ===============================
 # API ENDPOINTS
@@ -73,7 +82,11 @@ async def root():
             "POST /generate/raw": "Generate weather map (simplified)",
             "POST /generate/all": "Generate all 4 map types (maxtemp, mintemp, wind, sun)",
             "GET /countries": "List available country maps",
+            "GET /meteo/files": "List all generated weather maps",
             "GET /health": "Health check"
+        },
+        "static_files": {
+            "/meteo/{country}/{date}/{filename}": "Download generated weather maps (static files)"
         }
     }
 
@@ -96,6 +109,49 @@ async def list_countries():
     return {
         "available_countries": weather_service.get_available_countries(),
         "count": len(weather_service.get_available_countries())
+    }
+
+
+@app.get("/meteo/files")
+async def list_generated_files():
+    """
+    List all generated weather map files organized by country and date.
+    
+    Returns a structured list of all available weather maps.
+    """
+    if not METEO_FOLDER.exists():
+        return {"countries": {}, "total_files": 0}
+    
+    result = {}
+    total_files = 0
+    
+    # Iterate through country folders
+    for country_folder in METEO_FOLDER.iterdir():
+        if country_folder.is_dir():
+            country_code = country_folder.name
+            result[country_code] = {}
+            
+            # Iterate through date folders
+            for date_folder in country_folder.iterdir():
+                if date_folder.is_dir():
+                    date = date_folder.name
+                    files = []
+                    
+                    # List all PNG files in this date folder
+                    for file in sorted(date_folder.glob("*.png")):
+                        files.append({
+                            "name": file.name,
+                            "url": f"/meteo/{country_code}/{date}/{file.name}",
+                            "size_kb": round(file.stat().st_size / 1024, 2)
+                        })
+                        total_files += 1
+                    
+                    if files:
+                        result[country_code][date] = files
+    
+    return {
+        "countries": result,
+        "total_files": total_files
     }
 
 
